@@ -285,16 +285,9 @@
     $("#b-photo-name").textContent = n ? (n + " photo" + (n > 1 ? "s" : "") + " selected (demo only, not uploaded)") : "Photos help us quote accurately. Placeholder only in this demo, no file is uploaded.";
   });
 
-  /* ---------------- GoHighLevel calendar embed ---------------- */
-  (function ghlEmbed() {
-    var holder = $("#ghl-embed"); if (!holder) return;
-    var url = (CFG.ghl && CFG.ghl.bookingUrl) || "";
-    if (url && !/REPLACE_ME/.test(url)) {
-      // Live LeadConnector calendar embed.
-      holder.innerHTML = '<iframe src="' + url + '" title="Book through our calendar" loading="lazy" scrolling="no"></iframe>';
-    }
-    // else: keep the friendly placeholder rendered server-side.
-  })();
+  /* The live GoHighLevel booking calendar is embedded directly in book.html as
+     an <iframe> + LeadConnector form_embed.js auto-resizer, so no JS injection
+     is needed here. The booking URL also lives in lib/integrations.js. */
 
   // init
   showStep(1);
