@@ -582,22 +582,6 @@ def build_book():
       <div class="container container--wide">
         <div style="max-width:780px;margin:0 auto 1.6rem">{notice}</div>
 
-        <!-- Primary: live GoHighLevel / LeadConnector booking calendar -->
-        <div class="section-head section-head--center" style="max-width:660px;margin:0 auto 1.5rem">
-          <span class="eyebrow">Book instantly</span>
-          <h2>Pick a time on our live calendar</h2>
-          <p class="lead">Choose a slot that suits and you'll get instant confirmation.</p>
-        </div>
-        <div class="ghl-embed" id="ghl-embed" style="max-width:940px;margin:0 auto" data-reveal>
-          <iframe src="https://api.leadconnectorhq.com/widget/booking/nwKpZMQCkcdfGKapBrJe" title="Book an appointment with Coastline Electrical" style="width:100%;min-height:720px;border:none;overflow:hidden" scrolling="no" id="nwKpZMQCkcdfGKapBrJe_book"></iframe>
-        </div>
-
-        <!-- Secondary: native details flow (lead capture / callback request) -->
-        <div class="section-head section-head--center" style="max-width:660px;margin:3.5rem auto 1.5rem">
-          <h2>Prefer we call you back?</h2>
-          <p class="lead">Tell us about the job and your preferred time, and we'll confirm with you during business hours.</p>
-        </div>
-
         <div class="booking" id="booking" data-default-service="">
           <ol class="stepper" aria-label="Booking progress">
             <li class="step is-active" data-step="1"><span class="step__n">1</span><span class="step__label">Service</span></li>
@@ -687,8 +671,7 @@ def build_book():
             "desc": "Book a licensed Central Coast electrician online. Choose your service, date and time, and we'll confirm during business hours. Switchboards, EV chargers, lighting and more. No 24/7 callouts.",
             "canonical": ORIGIN + "/book.html", "page": "book",
             "jsonld": [breadcrumb_jsonld([("Home", "index.html"), ("Book Online", "book.html")])]}
-    extra = ('\n  <script defer src="assets/js/booking.js"></script>'
-             '\n  <script src="https://link.msgsndr.com/js/form_embed.js"></script>')
+    extra = '\n  <script defer src="assets/js/booking.js"></script>'
     write("book.html", render(meta, main, "book", extra_scripts=extra))
 
 
