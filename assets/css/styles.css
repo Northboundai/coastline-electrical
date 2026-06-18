@@ -99,6 +99,7 @@
 html {
   -webkit-text-size-adjust: 100%;
   scroll-behavior: smooth;
+  overflow-x: clip; /* never scroll sideways (clip doesn't break the sticky header) */
 }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
@@ -955,6 +956,9 @@ body.no-scroll { overflow: hidden; }
   .grid-3, .grid-4 { grid-template-columns: repeat(2, 1fr); }
   .split, .feature-row, .feature-row--flip { grid-template-columns: 1fr; }
   .feature-row--flip .feature-row__media { order: 0; }
+  /* on mobile, slide reveals vertically so the +/-30px X-shift can't push the
+     page sideways (full-width columns would otherwise overflow before reveal) */
+  [data-reveal="left"], [data-reveal="right"] { transform: translateY(30px); }
   .trust-bar__grid { grid-template-columns: repeat(2, 1fr); }
   .trust-item:nth-child(3) { border-left: none; }
   .trust-item { border-top: 1px solid rgba(255,255,255,.1); }
