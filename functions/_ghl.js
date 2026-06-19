@@ -200,7 +200,10 @@ async function handleLead(event, opts) {
 
     try {
       const alert = await ghl("/contacts/upsert", { locationId: CONFIG.locationId, firstName: "Lead Alerts", email: CONFIG.alertEmail, tags: ["internal-alerts"] }, token);
-      await sendEmail(token, (alert.contact || alert).id, `New ${lead.leadType.toLowerCase()} lead: ${lead.name}`, alertHtml(lead));
+      const when = appt ? ` — ${prettyDate(lead.preferredDate)} ${lead.preferredTime}` : "";
+      const where = lead.suburb ? ` (${lead.suburb})` : "";
+      const subjectAlert = `${appt ? "NEW BOOKING" : "New " + lead.leadType.toLowerCase()}: ${lead.name}${lead.serviceNeeded ? " — " + lead.serviceNeeded : ""}${where}${when}`;
+      await sendEmail(token, (alert.contact || alert).id, subjectAlert, alertHtml(lead, appt));
     } catch (e) { console.error("[lead] alert failed:", e.message); }
 
     return reply(200, { ok: true, pushed: true, contactId, appointmentCreated: !!appt, appointmentError: apptError || undefined });
@@ -224,17 +227,50 @@ function autoReplyHtml(first, lead, appt) {
   <p>If anything changes or it's urgent, just give us a call.</p>
   <p>Cheers,<br>The Coastline Electrical team</p>`;
 }
-function alertHtml(lead) {
-  const row = (k, v) => `<tr><td style="padding:2px 12px 2px 0;color:#666">${k}</td><td><strong>${escapeHtml(v || "-")}</strong></td></tr>`;
+// YYYY-MM-DD -> "23 Jun 2026" (no Date object, so no timezone drift)
+function prettyDate(d) {
+  const m = String(d || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return d || "";
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return `${+m[3]} ${months[+m[2] - 1]} ${m[1]}`;
+}
+function alertHtml(lead, appt) {
+  const esc = escapeHtml;
+  // row value is treated as pre-built HTML, so escape text before passing it in
+  const row = (k, v) => v ? `<tr><td style="padding:4px 16px 4px 0;color:#666;white-space:nowrap;vertical-align:top">${k}</td><td style="padding:4px 0"><strong>${v}</strong></td></tr>` : "";
+  const phoneLink = lead.phone ? `<a href="tel:${esc(lead.phone)}">${esc(lead.phone)}</a>` : "";
+  const emailLink = lead.email ? `<a href="mailto:${esc(lead.email)}">${esc(lead.email)}</a>` : "";
+  const fullAddress = [lead.address, lead.suburb].filter(Boolean).map(esc).join(", ") + (lead.suburb ? " NSW" : "");
+  const firstName = (lead.name || "").split(" ")[0] || lead.name;
+
+  const heading = appt
+    ? `<h2 style="margin:0 0 4px;color:#0a2540">New booking — ${esc(lead.serviceNeeded || "Job")}</h2>`
+    : `<h2 style="margin:0 0 4px;color:#0a2540">New ${esc(lead.leadType.toLowerCase())} lead — ${esc(lead.serviceNeeded || "enquiry")}</h2>`;
+
+  const apptBox = appt
+    ? `<div style="margin:12px 0;padding:12px 16px;background:#e8f8ee;border-left:4px solid #1d7a44;border-radius:6px">
+         <div style="font-size:16px;color:#0a2540"><strong>${esc(prettyDate(lead.preferredDate))} at ${esc(lead.preferredTime)}</strong></div>
+         <div style="font-size:13px;color:#1d7a44;margin-top:2px">Confirmed in your calendar and assigned to you.</div>
+       </div>`
+    : ((lead.preferredDate || lead.preferredTime)
+        ? `<p style="margin:8px 0"><strong>Requested time:</strong> ${esc(prettyDate(lead.preferredDate))} ${esc(lead.preferredTime)}</p>`
+        : "");
+
   return `
-  <p>New ${escapeHtml(lead.leadType)} lead from the website.</p>
-  <table style="border-collapse:collapse;font-size:14px">
-    ${row("Name", lead.name)}${row("Phone", lead.phone)}${row("Email", lead.email)}
-    ${row("Suburb", lead.suburb)}${row("Service", lead.serviceNeeded)}${row("Urgency", lead.urgency)}
-    ${row("Property", lead.propertyType)}${row("Preferred", (lead.preferredDate + " " + lead.preferredTime).trim())}
+  ${heading}
+  <p style="margin:0 0 8px;color:#666;font-size:13px">Came in via the website${lead.sourcePage ? " (" + esc(lead.sourcePage) + ")" : ""}.</p>
+  ${apptBox}
+  <table style="border-collapse:collapse;font-size:14px;margin-top:8px">
+    ${row("Customer", esc(lead.name))}
+    ${row("Phone", phoneLink)}
+    ${row("Email", emailLink)}
+    ${row("Job address", fullAddress.replace(/^,\s*/, "").trim() ? fullAddress : "")}
+    ${row("Service", esc(lead.serviceNeeded))}
+    ${row("Urgency", esc(lead.urgency))}
+    ${row("Property", esc(lead.propertyType))}
   </table>
-  ${lead.message ? `<p><strong>Message</strong><br>${escapeHtml(lead.message).replace(/\n/g, "<br>")}</p>` : ""}
-  <p>Call them back today.</p>`;
+  ${lead.message ? `<p style="margin-top:12px"><strong>Notes from customer</strong><br>${esc(lead.message).replace(/\n/g, "<br>")}</p>` : ""}
+  <p style="margin-top:16px">${lead.phone ? `Call <strong>${esc(firstName)}</strong> on ${phoneLink} to confirm.` : "Follow up with this lead today."}</p>`;
 }
 function escapeHtml(s) {
   return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
