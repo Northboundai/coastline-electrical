@@ -113,5 +113,5 @@ the generator.
 
 ---
 
-*Demo template by CoastForge. Replace placeholder business/licence details and
+*Demo template by Northbound AI. Replace placeholder business/licence details and
 review the privacy policy before publishing.*
