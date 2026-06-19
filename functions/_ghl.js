@@ -15,10 +15,10 @@ const GHL = "https://services.leadconnectorhq.com";
 
 const CONFIG = {
   locationId: "xxsGDQZGPawg6WJy5sVM",
-  // pipeline + stages — filled once the "Tradie Leads" pipeline exists (UI-only).
-  pipelineId: process.env.GHL_PIPELINE_ID || "",
-  stageNewLead: process.env.GHL_STAGE_NEW_LEAD || "",
-  stageBooked: process.env.GHL_STAGE_BOOKED || "",
+  // pipeline + stages — "Tradie leads" pipeline (IDs pulled from GHL 2026-06-20).
+  pipelineId: process.env.GHL_PIPELINE_ID || "2A3mKKLSEoqINj2dLfm3",
+  stageNewLead: process.env.GHL_STAGE_NEW_LEAD || "dda36c34-e75f-4a04-a58d-b73f192c6f8a", // New Lead
+  stageBooked: process.env.GHL_STAGE_BOOKED || "f92c98c5-63b3-42fe-80bf-392ad91a83b4",   // Booked
   fields: {
     suburb:        "XtBJ58ztLghN2Z9wCS50",
     serviceNeeded: "miYEshoZ2T8lxoqrSI8w",
