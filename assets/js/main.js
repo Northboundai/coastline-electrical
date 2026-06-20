@@ -187,6 +187,7 @@
       urgency: data.urgency || "",
       preferredDate: data.preferredDate || "",
       preferredTime: data.preferredTime || "",
+      slotIso: data.slotIso || "",
       message: data.message || "",
       consent: !!data.consent,
       tags: tags,
@@ -213,7 +214,7 @@
       body: JSON.stringify(lead)
     }).then(function (r) {
       return r.json().catch(function () { return {}; }).then(function (j) {
-        return { ok: r.ok, forwarded: !!(j && j.forwarded) };
+        return { ok: r.ok, forwarded: !!(j && j.forwarded), pushed: !!(j && j.pushed), appointmentCreated: j ? j.appointmentCreated : undefined };
       });
     }).catch(function (err) {
       // Demo mode / no backend yet — lead is safe in localStorage.

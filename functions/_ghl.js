@@ -70,6 +70,7 @@ function sanitise(body, defaults) {
     urgency: clean(body.urgency),
     preferredDate: clean(body.preferredDate),
     preferredTime: clean(body.preferredTime),
+    slotIso: clean(body.slotIso),
     message: clean(body.message),
   };
 }
@@ -91,6 +92,33 @@ async function ghl(path, body, token) {
 }
 const sendEmail = (token, contactId, subject, html) =>
   ghl("/conversations/messages", { type: "Email", contactId, subject, html }, token);
+
+async function ghlGet(path, token, version) {
+  const res = await fetch(`${GHL}${path}`, {
+    headers: { Authorization: `Bearer ${token}`, Version: version || "2021-07-28", Accept: "application/json", "User-Agent": "CoastlineSite/1.0" },
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`GHL GET ${path} ${res.status}: ${text}`);
+  return JSON.parse(text);
+}
+function fmtSlot(iso) {
+  const m = String(iso).match(/T(\d{2}):(\d{2})/);
+  if (!m) return iso;
+  let h = +m[1]; const mi = m[2]; const ap = h >= 12 ? "PM" : "AM";
+  h = h % 12; if (h === 0) h = 12;
+  return `${h}:${mi} ${ap}`;
+}
+// Live open slots for a YYYY-MM-DD from the booking calendar (Sydney time, on the half-hour).
+async function freeSlots(date) {
+  const token = process.env.GHL_API_TOKEN || "";
+  if (!token || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return [];
+  const start = Date.parse(`${date}T00:00:00+10:00`);
+  const end = start + 24 * 3600 * 1000;
+  const data = await ghlGet(`/calendars/${CONFIG.calendarId}/free-slots?startDate=${start}&endDate=${end}&timezone=Australia%2FSydney`, token, "2021-04-15");
+  const key = data[date] ? date : Object.keys(data).find((k) => /^\d{4}-\d{2}-\d{2}$/.test(k));
+  const raw = (key && data[key] && data[key].slots) || [];
+  return raw.filter((iso) => /T\d{2}:(00|30):/.test(iso)).map((iso) => ({ value: iso, label: fmtSlot(iso) }));
+}
 
 const cf = (id, value) => (value ? { id, field_value: value } : null);
 
@@ -176,21 +204,28 @@ async function handleLead(event, opts) {
     // Booking -> create a REAL auto-confirmed appointment on the calendar
     let appt = null;
     let apptError = null;
-    if (lead.leadType === "Booking" && lead.preferredDate && lead.preferredTime && CONFIG.calendarId) {
-      appt = buildAppt(lead.preferredDate, lead.preferredTime);
-      if (!appt) {
-        apptError = `Unparseable date/time: "${lead.preferredDate}" "${lead.preferredTime}"`;
-        console.error("[lead] appointment skipped:", apptError);
+    if (lead.leadType === "Booking" && (lead.slotIso || (lead.preferredDate && lead.preferredTime)) && CONFIG.calendarId) {
+      // Prefer the exact ISO slot the customer picked from live GHL availability.
+      if (lead.slotIso) {
+        const startMs = Date.parse(lead.slotIso);
+        if (isNaN(startMs)) apptError = `Bad slot: "${lead.slotIso}"`;
+        else appt = { start: new Date(startMs).toISOString(), end: new Date(startMs + CONFIG.slotMins * 60000).toISOString(), label: `${lead.preferredDate} ${lead.preferredTime}`.trim() };
       } else {
+        appt = buildAppt(lead.preferredDate, lead.preferredTime);
+        if (!appt) apptError = `Unparseable date/time: "${lead.preferredDate}" "${lead.preferredTime}"`;
+      }
+      if (appt) {
         try {
+          // No ignoreFreeSlotValidation -> GHL rejects clashes, so double-booking is impossible.
           await ghl("/calendars/events/appointments", {
             calendarId: CONFIG.calendarId, locationId: CONFIG.locationId, contactId,
             startTime: appt.start, endTime: appt.end,
             title: `${lead.serviceNeeded || "Job"} - ${lead.name}`,
             appointmentStatus: "confirmed", assignedUserId: CONFIG.assignedUserId,
-            ignoreFreeSlotValidation: true,
           }, token);
-        } catch (e) { console.error("[lead] appointment failed:", e.message); apptError = e.message; appt = null; }
+        } catch (e) { console.error("[lead] appointment failed (slot likely just taken):", e.message); apptError = e.message; appt = null; }
+      } else if (apptError) {
+        console.error("[lead] appointment skipped:", apptError);
       }
     }
 
@@ -276,4 +311,4 @@ function escapeHtml(s) {
   return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
-module.exports = { handleLead, JSON_HEADERS, CONFIG };
+module.exports = { handleLead, JSON_HEADERS, CONFIG, freeSlots };

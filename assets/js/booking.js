@@ -34,7 +34,8 @@
     fullSet[iso(d)] = true;
   });
 
-  var state = { step: 1, mode: "book", service: null, serviceName: null, bookingType: null, dateObj: null, time: null };
+  var state = { step: 1, mode: "book", service: null, serviceName: null, bookingType: null, dateObj: null, time: null, slotIso: null };
+  var lastSlotTaken = false;
   var MODE_STEPS = { book: [1, 2, 3, 4, 5], quote: [1, 4, 5] };
   function seq() { return MODE_STEPS[state.mode] || MODE_STEPS.book; }
   function nextN() { var s = seq(); return s[s.indexOf(state.step) + 1]; }
@@ -113,7 +114,7 @@
       b.addEventListener("click", function () {
         var parts = b.getAttribute("data-date").split("-");
         state.dateObj = new Date(+parts[0], +parts[1] - 1, +parts[2]);
-        state.time = null;
+        state.time = null; state.slotIso = null;
         renderCalendar();
         refreshNav();
       });
@@ -123,18 +124,35 @@
   /* ---------------- Step 3: time slots ---------------- */
   function renderSlots() {
     var box = $("#slots"); if (!box) return;
-    var isSat = state.dateObj && BY_APPT.indexOf(state.dateObj.getDay()) > -1;
-    var list = isSat ? SLOTS.slice(0, 3) : SLOTS;
-    var note = isSat ? '<p class="alert alert--info" style="grid-column:1/-1;margin-bottom:.4rem"><svg class="ic" aria-hidden="true"><use href="#i-info"></use></svg><span>Saturdays are by appointment, so windows are limited. We\'ll confirm the exact time with you.</span></p>' : "";
-    box.innerHTML = note + list.map(function (t) {
-      var sel = state.time === t ? " is-selected" : "";
-      return '<button type="button" class="slot' + sel + '" data-time="' + t + '">' + t + "</button>";
-    }).join("");
-    $$(".slot", box).forEach(function (b) {
-      b.addEventListener("click", function () {
-        state.time = b.getAttribute("data-time");
-        renderSlots(); refreshNav();
+    if (!state.dateObj) { box.innerHTML = ""; return; }
+    var dateIso = iso(state.dateObj);
+    box.setAttribute("data-loading", dateIso);
+    box.innerHTML = '<p class="booking-step__sub" style="grid-column:1/-1;margin:0">Loading available times…</p>';
+    var url = (CFG.endpoints && CFG.endpoints.slots) || "/api/slots";
+    fetch(url + "?date=" + dateIso).then(function (r) { return r.json(); }).then(function (j) {
+      if (box.getAttribute("data-loading") !== dateIso) return; // date changed mid-load
+      var slots = (j && j.slots) || [];
+      var info = '<svg class="ic" aria-hidden="true"><use href="#i-info"></use></svg>';
+      if (!slots.length) {
+        box.innerHTML = '<p class="alert alert--info" style="grid-column:1/-1">' + info + '<span>No open times on this day — please choose another date.</span></p>';
+        state.time = null; state.slotIso = null; lastSlotTaken = false; refreshNav(); return;
+      }
+      var taken = lastSlotTaken ? '<p class="alert alert--info" style="grid-column:1/-1;margin-bottom:.4rem"><svg class="ic" aria-hidden="true"><use href="#i-warning"></use></svg><span>That time was just booked by someone else — please choose another.</span></p>' : "";
+      lastSlotTaken = false;
+      box.innerHTML = taken + slots.map(function (s) {
+        var sel = state.slotIso === s.value ? " is-selected" : "";
+        return '<button type="button" class="slot' + sel + '" data-time="' + s.label + '" data-iso="' + s.value + '">' + s.label + "</button>";
+      }).join("");
+      $$(".slot", box).forEach(function (b) {
+        b.addEventListener("click", function () {
+          state.time = b.getAttribute("data-time");
+          state.slotIso = b.getAttribute("data-iso");
+          $$(".slot", box).forEach(function (x) { x.classList.toggle("is-selected", x === b); });
+          refreshNav();
+        });
       });
+    }).catch(function () {
+      box.innerHTML = '<p class="alert alert--info" style="grid-column:1/-1"><svg class="ic" aria-hidden="true"><use href="#i-warning"></use></svg><span>Couldn\'t load times right now — please call us on (02) 4321 1234 or try again.</span></p>';
     });
   }
 
@@ -244,14 +262,23 @@
       suburb: f.suburb, address: f.address, serviceNeeded: state.serviceName,
       propertyType: f.propertyType, urgency: f.urgency,
       preferredDate: q ? "" : (state.dateObj ? iso(state.dateObj) : ""),
-      preferredTime: q ? "" : state.time, message: f.message, consent: f.consent,
+      preferredTime: q ? "" : state.time,
+      slotIso: q ? "" : (state.slotIso || ""),
+      message: f.message, consent: f.consent,
       sourcePage: "book.html"
     });
     nextBtn.classList.add("is-loading");
     nextBtn.innerHTML = '<span class="spinner"></span> Sending';
     nextBtn.disabled = true; backBtn.disabled = true;
     var ep = (CFG.endpoints && (q ? CFG.endpoints.contact : CFG.endpoints.booking)) || null;
-    (L.send ? L.send(lead, ep) : Promise.resolve()).then(function () {
+    (L.send ? L.send(lead, ep) : Promise.resolve({})).then(function (res) {
+      // Booking but GHL rejected the slot as just-taken -> send them back to pick another.
+      if (!q && res && res.pushed && res.appointmentCreated === false) {
+        lastSlotTaken = true;
+        nextBtn.classList.remove("is-loading"); nextBtn.disabled = false; backBtn.disabled = false;
+        showStep(3);
+        return;
+      }
       showSuccess(lead, q);
     });
   }
